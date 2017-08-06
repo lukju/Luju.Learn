@@ -1,0 +1,258 @@
+﻿setting up an asp.net core web application which calls a backend api secured by OpenId Connect 
+Infos from https://github.com/Azure-Samples/active-directory-dotnet-webapp-webapi-openidconnect-aspnetcore
+
+
+- new asp.net core web api project
+- in appsettings.json, add:
+	"Audience": "https://ad.ocag.biz/Luju.Learn.Auth.Oidc.WebApi",
+- in StartUp:ConfigureServices, add:
+	services.AddAuthentication();
+- in app.UseJwtBearerAuthentication in StartUp.Configure, add:
+	AutomaticAuthenticate = true,
+	AutomaticChallenge = true,
+- in ValuesController, replace content of Get():
+	List<string> values = new List<string>();
+	values.Add(User.Identity.Name);
+	values.Add(User.Identity.AuthenticationType);
+	foreach (Claim c in User.Claims)
+	{
+		values.Add(c.Type + ":" + c.Value);
+	}
+	return values;
+			
+- new asp.net core web application
+- activate authentication: school or business account
+- add Nuget:
+	Microsoft.AspNetCore.Session
+	Microsoft.IdentityModel.Clients.ActiveDirectory
+- add usings in StartUp:
+	using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+	using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+	using Microsoft.IdentityModel.Clients.ActiveDirectory;
+- add services.AddSession(); in StartUp:ConfigureServices
+- add app.UseSession(); in StartUp:Configure
+
+- add class AzureAdConfiguration:
+	public class AzureAdConfiguration
+    {
+        public string AADInstance { get; set; }
+        public string CallbackPath { get; set; }
+        public string ClientId { get; set; }
+        public string ClientSecret { get; set; }
+        public string ApiResourceId { get; set; }
+        public string Domain { get; set; }
+        public string TenantId { get; set; }
+        public string Authority { get { return AADInstance + TenantId; } }
+    }
+- add to ctor in StartUp:
+	Configuration.GetSection("Authentication:AzureAd").Bind(AzureAdConfig);
+- add to StartUp:
+	private AzureAdConfiguration AzureAdConfig { get; }
+- add to ConfigureServices in StartUp:
+	services.AddSingleton(typeof(AzureAdConfiguration), AzureAdConfig);
+- replaceapp.UseOpenIdConnectAuthentication in StartUp.Configure
+	app.UseOpenIdConnectAuthentication(new OpenIdConnectOptions
+    {
+        ClientId = AzureAdConfig.ClientId,
+        Authority = AzureAdConfig.Authority,
+        CallbackPath = AzureAdConfig.CallbackPath,
+        ResponseType = OpenIdConnectResponseType.CodeIdToken,
+        GetClaimsFromUserInfoEndpoint = false,
+        Events = new OpenIdConnectEvents
+        {
+            OnAuthorizationCodeReceived = OnAuthorizationCodeReceived,
+        }
+    });
+
+- add method to StartUp
+	private async Task OnAuthorizationCodeReceived(AuthorizationCodeReceivedContext context)
+	{
+		// Acquire a Token for the Graph API and cache it using ADAL.  In the TodoListController, we'll use the cache to acquire a token to the Todo List API
+        string userObjectId = (context.Ticket.Principal.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier"))?.Value;
+        ClientCredential clientCred = new ClientCredential(AzureAdConfig.ClientId, AzureAdConfig.ClientSecret);
+        AuthenticationContext authContext = new AuthenticationContext(AzureAdConfig.Authority, new NaiveSessionCache(userObjectId, context.HttpContext.Session));
+        AuthenticationResult authResult = await authContext.AcquireTokenByAuthorizationCodeAsync(
+            context.ProtocolMessage.Code, new Uri(context.Properties.Items[OpenIdConnectDefaults.RedirectUriForCodePropertiesKey]), clientCred, "https://graph.windows.net");
+
+
+        // Notify the OIDC middleware that we already took care of code redemption.
+        context.HandleCodeRedemption();
+        context.HandleResponse();
+	}
+- add class NaiveSessionCache
+	public class NaiveSessionCache : TokenCache
+    {
+        private static readonly object FileLock = new object();
+        string UserObjectId = string.Empty;
+        string CacheId = string.Empty;
+        ISession Session = null;
+
+        public NaiveSessionCache(string userId, ISession session)
+        {
+            UserObjectId = userId;
+            CacheId = UserObjectId + "_TokenCache";
+            Session = session;
+            this.AfterAccess = AfterAccessNotification;
+            this.BeforeAccess = BeforeAccessNotification;
+            Load();
+        }
+
+        public void Load()
+        {
+            lock (FileLock)
+            {
+                this.Deserialize(Session.Get(CacheId));
+            }
+        }
+
+        public void Persist()
+        {
+            lock (FileLock)
+            {
+                // reflect changes in the persistent store
+                Session.Set(CacheId, this.Serialize());
+                // once the write operation took place, restore the HasStateChanged bit to false
+                this.HasStateChanged = false;
+            }
+        }
+
+        // Empties the persistent store.
+        public override void Clear()
+        {
+            base.Clear();
+            Session.Remove(CacheId);
+        }
+
+        public override void DeleteItem(TokenCacheItem item)
+        {
+            base.DeleteItem(item);
+            Persist();
+        }
+
+        // Triggered right before ADAL needs to access the cache.
+        // Reload the cache from the persistent store in case it changed since the last access.
+        void BeforeAccessNotification(TokenCacheNotificationArgs args)
+        {
+            Load();
+        }
+
+        // Triggered right after ADAL accessed the cache.
+        void AfterAccessNotification(TokenCacheNotificationArgs args)
+        {
+            // if the access operation resulted in a cache update
+            if (this.HasStateChanged)
+            {
+                Persist();
+            }
+        }
+    }
+- add controller "ValuesController"
+- add class attributes to ValuesController:
+	[Authorize]
+    [Route("api/[controller]")]
+- add code to ValuesController:
+	private AzureAdConfiguration _config;
+
+    public ValuesController(AzureAdConfiguration config)
+    {
+        this._config = config;
+    }
+	private const string ValuesApiBaseAddress = "https://localhost:44378";
+	// GET: FirstApi
+	[HttpGet]
+	public async Task<IActionResult> Get()
+	{
+		AuthenticationResult result = null;
+		List<string> values = new List<string>();
+
+		try
+		{
+			string userObjectID = (User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier"))?.Value;
+			AuthenticationContext authContext = new AuthenticationContext(Startup.Authority, new NaiveSessionCache(userObjectID, HttpContext.Session));
+			ClientCredential credential = new ClientCredential(Startup.ClientId, Startup.ClientSecret);
+			result = await authContext.AcquireTokenSilentAsync(Startup.ApiResourceId, credential, new UserIdentifier(userObjectID, UserIdentifierType.UniqueId));
+
+			//
+			// Retrieve the user's To Do List.
+			//
+			HttpClient client = new HttpClient();
+			HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, ValuesApiBaseAddress + "/api/values");
+			request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", result.AccessToken);
+			HttpResponseMessage response = await client.SendAsync(request);
+
+			//
+			// Return the To Do List in the view.
+			//
+			if (response.IsSuccessStatusCode)
+			{
+				List<String> responseElements = new List<String>();
+				JsonSerializerSettings settings = new JsonSerializerSettings();
+				String responseString = await response.Content.ReadAsStringAsync();
+				responseElements = JsonConvert.DeserializeObject<List<String>>(responseString, settings);
+				foreach (String responseElement in responseElements)
+				{
+					values.Add(responseElement);
+				}
+
+				return Ok(values);
+			}
+			else
+			{
+				//
+				// If the call failed with access denied, then drop the current access token from the cache, 
+				//     and show the user an error indicating they might need to sign-in again.
+				//
+				if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+				{
+					var todoTokens = authContext.TokenCache.ReadItems().Where(a => a.Resource == Startup.ApiResourceId);
+					foreach (TokenCacheItem tci in todoTokens)
+						authContext.TokenCache.DeleteItem(tci);
+
+					ViewBag.ErrorMessage = "UnexpectedError";
+
+				}
+			}
+		}
+		catch (Exception ee)
+		{
+			if (HttpContext.Request.Query["reauth"] == "True")
+			{
+				//
+				// Send an OpenID Connect sign-in request to get a new set of tokens.
+				// If the user still has a valid session with Azure AD, they will not be prompted for their credentials.
+				// The OpenID Connect middleware will return to this controller after the sign-in response has been handled.
+				//
+				return new ChallengeResult(OpenIdConnectDefaults.AuthenticationScheme);
+			}
+
+
+		}
+
+
+		//
+		// If the call failed for any other reason, show the user an error.
+		//
+		return View("Error");
+	}
+	
+- in azure portal, open "Azure ActiveDirectory", App Registrations, Web App entry (Luju.Learn.Auth.Oidc.WebApp), go to :
+	Keys -> add a new key
+		Key Description: Access To WebApi (doesn't matter)
+		Duration: Never expired (doesn't matter)
+		IMPORTANT: copy the key, it won't be visible anymore!
+	Required Permissions:
+		Add, Select an Api, type the name of the api (Luju.Learn.Auth.Oidc.WebApi)
+		Enable Access for Delegated Identity
+- open appsettings.json in WebApp project
+	- paste the key as value for the ClientSecret property
+	- add property: ApiResourceId with a value https://ad.ocag.biz/Luju.Learn.Auth.Oidc.WebApi (change for your env.)
+	
+	
+in Solution Settings in Visual Studio, enable starting of multiple projects and select both, WebApi and WebApp project
+in project settings of WebApi project, unselect "Start-Url" in debugging area
+	
+TokenCache is now Session based which isn't RESTful and also does not scale. Goal must be to replace it (uninstall Nuget Microsoft.AspNetCore.Session)
+More Infos: https://docs.microsoft.com/en-us/azure/architecture/multitenant-identity/token-cache
+Better: https://dzimchuk.net/adal-distributed-token-cache-in-asp-net-core/
+
+        

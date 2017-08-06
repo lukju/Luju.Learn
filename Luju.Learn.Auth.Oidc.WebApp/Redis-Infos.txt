@@ -1,0 +1,11 @@
+﻿In order to use local Redis-Cache:
+
+- install Nuget Package Redis-64
+- run redis-server.exe from C:\Users\[logged in user]\.nuget\packages\Redis-64\[version installed]\tools
+- install Nuget Package Microsoft.Extensions.Caching.Redis.Core for using Redis in Asp.Net Core
+- in StartUp.ConfigureServices:
+	services.AddDistributedRedisCache(options =>
+    {
+        options.Configuration = "localhost";
+        options.InstanceName = "SampleInstance";
+    });
