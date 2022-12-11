@@ -29,14 +29,14 @@ class _SystemHash {
   }
 }
 
-String $productRepositoryHash() => r'1143e6a957468f07814b030b8e53d8ea1ddb037b';
+String $productsRepositoryHash() => r'0c5c5055a5705defb617260053d24e0a92999c88';
 
-/// See also [productRepository].
-final productRepositoryProvider = AutoDisposeProvider<ProductRepository>(
-  productRepository,
-  name: r'productRepositoryProvider',
+/// See also [productsRepository].
+final productsRepositoryProvider = AutoDisposeProvider<ProductsRepository>(
+  productsRepository,
+  name: r'productsRepositoryProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
-      : $productRepositoryHash,
+      : $productsRepositoryHash,
 );
-typedef ProductRepositoryRef = AutoDisposeProviderRef<ProductRepository>;
+typedef ProductsRepositoryRef = AutoDisposeProviderRef<ProductsRepository>;

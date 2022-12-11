@@ -8,7 +8,7 @@ import '../models/product.dart';
 part 'cart_controller.g.dart';
 
 @riverpod
-class CartController extends _$CartController {
+class CurrentCart extends _$CurrentCart {
   @override
   Cart build() {
     return const Cart(items: {});

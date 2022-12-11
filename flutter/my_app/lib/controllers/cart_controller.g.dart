@@ -29,20 +29,18 @@ class _SystemHash {
   }
 }
 
-String $CartControllerHash() => r'4d6f740c30e4e4707cb376389fd8cbb6b1228a9d';
+String $CurrentCartHash() => r'7e8ebda619d0ae29541800950bc2cb0e3f24afac';
 
-/// See also [CartController].
-final cartControllerProvider =
-    AutoDisposeNotifierProvider<CartController, Cart>(
-  CartController.new,
-  name: r'cartControllerProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : $CartControllerHash,
+/// See also [CurrentCart].
+final currentCartProvider = AutoDisposeNotifierProvider<CurrentCart, Cart>(
+  CurrentCart.new,
+  name: r'currentCartProvider',
+  debugGetCreateSourceHash:
+      const bool.fromEnvironment('dart.vm.product') ? null : $CurrentCartHash,
 );
-typedef CartControllerRef = AutoDisposeNotifierProviderRef<Cart>;
+typedef CurrentCartRef = AutoDisposeNotifierProviderRef<Cart>;
 
-abstract class _$CartController extends AutoDisposeNotifier<Cart> {
+abstract class _$CurrentCart extends AutoDisposeNotifier<Cart> {
   @override
   Cart build();
 }

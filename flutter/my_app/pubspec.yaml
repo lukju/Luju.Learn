@@ -43,7 +43,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   build_runner: ^2.3.2
-  riverpod_generator: ^1.0.6 # dart run build_runner watch
+  riverpod_generator: ^1.0.6 # dart run build_runner watch         OR       flutter packages pub run build_runner watch
   freezed: ^2.3.2
 
   # The "flutter_lints" package below contains a set of recommended lints to
