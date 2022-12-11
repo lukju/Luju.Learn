@@ -16,7 +16,6 @@ class CategoryChooserWidget extends ConsumerWidget {
     final AsyncValue<List<Category>> categoriesAsync =
         ref.watch(categoryListProvider);
     return SizedBox(
-      height: 0.3 * MediaQuery.of(context).size.height,
       child: categoriesAsync.when(
         data: (categories) =>
             _LoadedCategoryChooserWidget(categories: categories),
@@ -38,11 +37,14 @@ class _LoadedCategoryChooserWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     List<Widget> categoryWidgets = [];
     for (var category in categories) {
-      var widget = ElevatedButton(
-        onPressed: () {
-          ref.read(currentCategoryProvider.notifier).update(category);
-        },
-        child: Text(category.title),
+      var widget = Padding(
+        padding: const EdgeInsets.all(10),
+        child: ElevatedButton(
+          onPressed: () {
+            ref.read(currentCategoryProvider.notifier).update(category);
+          },
+          child: Text(category.title),
+        ),
       );
       categoryWidgets.add(widget);
     }

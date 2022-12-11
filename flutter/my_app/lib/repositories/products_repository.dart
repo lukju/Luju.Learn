@@ -63,7 +63,7 @@ Map<String, List<Product>> _allProducts = {
 
 class ProductsRepository {
   Future<List<Product>> loadProductsByCategory(Category category) {
-    return Future.delayed(const Duration(seconds: 1), () {
+    return Future.delayed(const Duration(milliseconds: 300), () {
       List<Product> products = _allProducts[category.id] ?? [];
       return products;
     });
@@ -74,7 +74,7 @@ class ProductsRepository {
     for (var catId in _allProducts.keys) {
       products.addAll(_allProducts[catId] ?? []);
     }
-    return Future.delayed(const Duration(seconds: 1), () {
+    return Future.delayed(const Duration(milliseconds: 300), () {
       return products;
     });
   }
